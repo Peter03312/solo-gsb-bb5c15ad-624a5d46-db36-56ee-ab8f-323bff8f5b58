@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: restriction-db
+    environment:
+      POSTGRES_USER: restrict
+      POSTGRES_PASSWORD: restrict
+      POSTGRES_DB: restrict
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restrict -d restrict"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    container_name: restriction-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://restrict:restrict@db:5432/restrict
+      DB_CONNECT_RETRIES: "30"
+      DB_CONNECT_INTERVAL: "1"
+      # 连接池：执行器每轮只短时占用 1 条连接，其余全部留给普通 HTTP 请求
+      DB_POOL_MIN_SIZE: "1"
+      DB_POOL_MAX_SIZE: "10"
+      DB_POOL_TIMEOUT: "10"
+      # 到期预约执行器：轮询间隔、单页有界取数上界、未预期故障重试退避（秒）
+      RESERVATION_WORKER_INTERVAL: "0.5"
+      RESERVATION_FETCH_BATCH_SIZE: "100"
+      RESERVATION_RETRY_BASE_DELAY: "1"
+      RESERVATION_RETRY_MAX_DELAY: "60"
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+volumes:
+  pgdata:
